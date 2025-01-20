@@ -1,0 +1,88 @@
+import pandas as pd
+
+#1. Inspect each DataFrame:
+visits = pd.read_csv('visits.csv',
+                     parse_dates=[1])
+print("Visits:", len(visits))
+cart = pd.read_csv('cart.csv',
+                   parse_dates=[1])
+print("Cart:", len(cart))
+checkout = pd.read_csv('checkout.csv',
+                       parse_dates=[1])
+print("Checkout:", len(checkout))
+purchase = pd.read_csv('purchase.csv',
+                       parse_dates=[1])
+print("Purchase:", len(purchase))
+
+#2. Combine 'Visits' + 'Cart' in a Left-Merge:
+visits_cart = pd.merge(visits, cart, how='left')
+total_visits = len(visits_cart)
+
+#4. Filter 'Null' Timestamps for 'Cart_Time':
+ct_null = visits_cart[visits_cart.cart_time.isnull()]
+no_cart = len(ct_null)
+
+#5. Percentage of users who DID NOT places a T-Shirt in their cart (Visit to Cart Loss):
+percent_null = round(no_cart * 100 / total_visits, 1)
+print(f'{percent_null} %')
+
+#6. Combine 'Cart' and 'Checkout' using Left-Merge:
+cart_checkout = pd.merge(cart, checkout, how='left')
+visits2 = len(cart_checkout)
+#6.2. Get total values for 'Cart' to 'Checkout' loss:
+cc_null = cart_checkout[cart_checkout.checkout_time.isnull()]
+no_cc = len(cc_null)
+
+#7. Merge all DFs in a Funnel = 'All Data':
+all_data = visits.merge(cart, how='left').merge(checkout, how='left').merge(purchase, how='left')
+all_data.drop_duplicates(subset='user_id', inplace=True)
+
+#8. Total of users who proceeded 'Checkout' but did not purchased a T-Shirt:
+final_checkout = all_data[all_data.checkout_time.notnull()].reset_index()
+fc_len = len(final_checkout)
+print(f'There where {fc_len} users who moved to "Checkout"')
+#8.2. Get the percentage:
+no_purchase_chk = final_checkout[final_checkout.purchase_time.isnull()].reset_index()
+np_len = len(no_purchase_chk)
+print(f'There where {np_len} users who did not proceeded to "Purchase"')
+np_percent = round((np_len*100) / fc_len, 2)
+print(f'{np_percent} %')
+
+
+#9. Which step of the funnel is the weakest? First, get the len of all values in 'All Data' DF:
+ad_len = len(all_data)
+print(f'Total visitors: {ad_len}')
+#9.2. Set the 'Visitors' to 'Cart' Loss:
+cart_t = all_data[all_data.cart_time.isnull()]
+ct_len = len(cart_t)
+print(f'Visitors who left before "Cart": {ct_len}')
+ct_percent = (ct_len*100) / ad_len
+print('Visit to Cart Loss: ' + str(ct_percent) + '% ')
+
+#9.3. Set the 'Cart' to 'Checkout' Loss:
+chout_t = all_data[all_data.checkout_time.notnull()]
+chout_len = len(chout_t)
+print(f'Visitors who reached "Checkout": {chout_len}')
+#Considerar que estos SÍ COMPLETARON EL PASO, por lo que se debe restar:
+base_cart = ad_len - ct_len
+chout_percent = round((chout_len / base_cart) * 100, 2)
+print('Cart to Checkout Loss: ' + str(100 - chout_percent) + '% ')
+
+#9.4. Set the 'Checkout' to 'Purchase' Loss:
+pur_t = all_data[all_data.purchase_time.notnull()]
+pur_len = len(pur_t)
+print(f'Visitors who reached "Purchase": {pur_len}')
+#Considerar que estos SÍ COMPLETARON EL PASO, por lo que se debe restar:
+pur_percent = round((pur_len * 100) / chout_len, 2)
+print('Checkout to Purchase Loss: ' + str(100 - pur_percent) + '% ')
+
+
+#10. Calculate the average time from 'All Data', from initial visit to final purchase. Add a new column:
+all_data['average_purchase_time'] = all_data.purchase_time - all_data.visit_time
+valid_times = all_data[all_data.average_purchase_time.notnull()]
+avg_times = valid_times.average_purchase_time.mean()
+total_seconds = avg_times.total_seconds()
+minutes = int(total_seconds // 60)
+seconds = int(total_seconds % 60)
+formatted_avg_time = f"{minutes:02}:{seconds:02}"
+print(f'Average time from visit to purchase: {formatted_avg_time} min.')
